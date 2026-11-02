@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore fictional student academic profiles and K-means segments.">
+  <title>Student Segmentation Explorer</title>
+  <style>
+    :root{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#172033;background:#f3f6fb;font-synthesis:none;text-rendering:optimizeLegibility}
+    *{box-sizing:border-box}body{margin:0}header{background:linear-gradient(120deg,#132a52,#2457a6);color:white;padding:34px max(22px,calc((100vw - 1120px)/2)) 30px}
+    h1{font-size:clamp(1.8rem,4vw,2.65rem);margin:0 0 8px}header p{max-width:780px;margin:0;color:#d9e7ff;line-height:1.55}.wrap{max-width:1120px;margin:24px auto;padding:0 18px 44px}
+    .notice{background:#fff8df;border:1px solid #f2d67b;color:#664f00;border-radius:12px;padding:13px 16px;margin-bottom:18px;line-height:1.5}
+    .layout{display:grid;grid-template-columns:310px 1fr;gap:18px}.card{background:white;border:1px solid #e2e8f0;border-radius:14px;padding:20px;box-shadow:0 3px 12px #1720330a}
+    h2{font-size:1.15rem;margin:0 0 14px}label{display:block;font-size:.91rem;font-weight:650;margin:15px 0 7px}input,select,button{font:inherit}input[type=text],select,input[type=file]{width:100%;padding:10px 11px;border:1px solid #cbd5e1;border-radius:8px;background:white;color:#172033}input[type=range]{width:100%;accent-color:#2764c5}
+    .feature{display:flex;align-items:center;gap:8px;font-weight:450;margin:8px 0}.feature input{accent-color:#2764c5}.small{color:#64748b;font-size:.86rem;line-height:1.45}.primary{border:0;background:#245db3;color:white;padding:11px 15px;border-radius:8px;font-weight:700;cursor:pointer;width:100%;margin-top:14px}.primary:hover{background:#194989}
+    .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}.metric{background:#f7f9fc;border-radius:10px;padding:13px}.metric span{display:block;color:#64748b;font-size:.82rem}.metric strong{display:block;font-size:1.25rem;margin-top:5px}
+    .profile{display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:10px;margin:13px 0}.pill{background:#eef4ff;border:1px solid #dce8ff;border-radius:10px;padding:12px}.pill span{font-size:.8rem;color:#52627a;display:block}.pill strong{font-size:1.15rem;display:block;margin-top:5px}
+    table{width:100%;border-collapse:collapse;font-size:.92rem}th,td{text-align:left;border-bottom:1px solid #e8edf4;padding:9px 8px}th{color:#53627a;font-weight:700}.chart{width:100%;height:300px;border:1px solid #edf1f6;border-radius:10px;background:#fbfcfe}.status{margin-top:12px;color:#b42318;font-size:.9rem}.hidden{display:none!important}.footer{color:#64748b;font-size:.82rem;margin-top:18px}
+    @media(max-width:780px){.layout{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎓 Student Segmentation Explorer</h1>
+    <p>Look up a student’s academic profile and explore the K-means segment formed from grades, study time, absences, and prior failures.</p>
+  </header>
+  <main class="wrap">
+    <div class="notice"><strong>Demo data is fictional.</strong> Use this page to explore the project, not to make judgments or high-stakes decisions about students. Do not publish real students’ names or grades on a public website.</div>
+    <div class="layout">
+      <section class="card">
+        <h2>Data and settings</h2>
+        <label for="csvFile">Use a CSV file (optional)</label>
+        <input id="csvFile" type="file" accept=".csv,text/csv">
+        <p class="small">CSV needs a <code>student_name</code> column and at least two numeric columns. Uploaded data stays in this browser tab.</p>
+        <label for="search">Find a student</label>
+        <input id="search" type="text" placeholder="Type a name, e.g. Mira">
+        <label for="studentSelect">Select student</label>
+        <select id="studentSelect"></select>
+        <label for="kRange">Number of segments: <span id="kLabel">3</span></label>
+        <input id="kRange" type="range" min="2" max="6" value="3">
+        <label>Features used by K-means</label>
+        <div id="featureList"></div>
+        <button id="runButton" class="primary">Update segments</button>
+        <div id="status" class="status" role="status"></div>
+      </section>
+      <section>
+        <div class="card" style="margin-bottom:18px">
+          <h2 id="profileTitle">Student academic profile</h2>
+          <div class="metrics">
+            <div class="metric"><span>Students in this segment</span><strong id="segmentSize">—</strong></div>
+            <div class="metric"><span>Number of segments</span><strong id="segmentCount">—</strong></div>
+            <div class="metric"><span>Silhouette score</span><strong id="silhouette">—</strong></div>
+          </div>
+          <div id="studentProfile" class="profile"></div>
+          <p id="segmentNote" class="small"></p>
+        </div>
+        <div class="card" style="margin-bottom:18px">
+          <h2>Average profile by segment</h2>
+          <div style="overflow-x:auto"><table id="summaryTable"></table></div>
+        </div>
+        <div class="card">
+          <h2>Student groups (grades view)</h2>
+          <canvas id="scatter" class="chart" aria-label="Scatter plot of student grades colored by segment"></canvas>
+          <p class="small">Each dot is one student. The selected student is outlined in red. The chart shows the first two selected features.</p>
+        </div>
+      </section>
+    </div>
+    <p class="footer">K-means finds patterns in the chosen data; it does not explain causes or predict a student’s future. Cluster numbers are arbitrary.</p>
+  </main>
+  <script>
+    const defaultFeatures = ["G1", "G2", "studytime", "absences", "failures"];
+    let rows = [];
+    let featureNames = [];
+    let assignments = [];
+    const colors = ["#2d6cdf", "#f28e2b", "#25a56a", "#b05acb", "#dd4b61", "#4aa3a1"];
+    const byId = id => document.getElementById(id);
+
+    function parseCSV(text) {
+      const lines = text.trim().split(/\r?\n/);
+      const splitLine = line => {
+        const cells = []; let value = ""; let quoted = false;
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"' && line[i + 1] === '"' && quoted) { value += '"'; i++; }
+          else if (char === '"') quoted = !quoted;
+          else if (char === "," && !quoted) { cells.push(value.trim()); value = ""; }
+          else value += char;
+        }
+        cells.push(value.trim()); return cells;
+      };
+      const headers = splitLine(lines[0]).map(value => value.replace(/^\uFEFF/, ""));
+      return lines.slice(1).filter(line => line.trim()).map(line => {
+        const cells = splitLine(line); const row = {};
+        headers.forEach((name, index) => { row[name] = cells[index] ?? ""; });
+        return row;
+      });
+    }
+
+    function detectColumns(data) {
+      const nameKey = Object.keys(data[0] || {}).find(key => ["student_name", "student name", "name"].includes(key.trim().toLowerCase()));
+      if (!nameKey) throw new Error("Add a name column called student_name, student name, or name.");
+      const numeric = Object.keys(data[0]).filter(key => key !== nameKey && data.every(row => row[key] !== "" && Number.isFinite(Number(row[key]))));
+      if (numeric.length < 2) throw new Error("Your file needs at least two numeric feature columns.");
+      data.forEach((row, index) => { row.__name = String(row[nameKey] || `Student ${index + 1}`); numeric.forEach(key => row[key] = Number(row[key])); });
+      featureNames = numeric;
+      return numeric;
+    }
+
+    function drawFeatureChoices() {
+      const area = byId("featureList"); area.innerHTML = "";
+      featureNames.forEach((feature, index) => {
+        const label = document.createElement("label"); label.className = "feature";
+        const check = document.createElement("input"); check.type = "checkbox"; check.value = feature; check.checked = index < 5;
+        const text = document.createTextNode(feature.replaceAll("_", " "));
+        label.append(check, text); area.appendChild(label);
+      });
+    }
+
+    function selectedFeatures() { return [...byId("featureList").querySelectorAll("input:checked")].map(input => input.value); }
+
+    function cluster(data, features, k) {
+      const means = features.map(key => data.reduce((sum, row) => sum + row[key], 0) / data.length);
+      const scales = features.map((key, j) => Math.sqrt(data.reduce((sum, row) => sum + (row[key] - means[j]) ** 2, 0) / data.length) || 1);
+      const values = data.map(row => features.map((key, j) => (row[key] - means[j]) / scales[j]));
+      let centers = Array.from({length:k}, (_, group) => values[Math.floor(group * values.length / k)].slice());
+      let labels = new Array(data.length).fill(0);
+      for (let step = 0; step < 60; step++) {
+        let moved = false;
+        values.forEach((point, i) => {
+          let best = 0, bestDistance = Infinity;
+          centers.forEach((center, group) => {
+            const distance = point.reduce((sum, value, j) => sum + (value - center[j]) ** 2, 0);
+            if (distance < bestDistance) { best = group; bestDistance = distance; }
+          });
+          if (labels[i] !== best) moved = true;
+          labels[i] = best;
+        });
+        centers = centers.map((center, group) => {
+          const members = values.filter((_, i) => labels[i] === group);
+          if (!members.length) return values[(group * 7 + step) % values.length].slice();
+          return center.map((_, j) => members.reduce((sum, point) => sum + point[j], 0) / members.length);
+        });
+        if (!moved && step > 0) break;
+      }
+      return {labels, values};
+    }
+
+    function silhouette(values, labels, k) {
+      if (values.length > 800) return NaN;
+      const groups = Array.from({length:k}, (_, group) => values.map((point, i) => labels[i] === group ? i : -1).filter(i => i >= 0));
+      const distance = (a, b) => Math.sqrt(a.reduce((sum, value, j) => sum + (value - b[j]) ** 2, 0));
+      const scores = values.map((point, i) => {
+        const own = groups[labels[i]].filter(j => j !== i);
+        if (!own.length) return 0;
+        const a = own.reduce((sum, j) => sum + distance(point, values[j]), 0) / own.length;
+        const b = Math.min(...groups.filter((_, group) => group !== labels[i] && group.length).map(group => group.reduce((sum, j) => sum + distance(point, values[j]), 0) / group.length));
+        return (b - a) / Math.max(a, b);
+      });
+      return scores.reduce((sum, value) => sum + value, 0) / scores.length;
+    }
+
+    function updateStudentOptions() {
+      const query = byId("search").value.trim().toLowerCase();
+      const select = byId("studentSelect"); const previous = select.value;
+      select.innerHTML = "";
+      rows.forEach((row, index) => {
+        if (row.__name.toLowerCase().includes(query)) {
+          const option = document.createElement("option"); option.value = String(index); option.textContent = row.__name; select.appendChild(option);
+        }
+      });
+      if ([...select.options].some(option => option.value === previous)) select.value = previous;
+      renderProfile();
+    }
+
+    function renderProfile() {
+      if (!assignments.length || !byId("studentSelect").value) return;
+      const index = Number(byId("studentSelect").value); const row = rows[index]; const group = assignments[index];
+      byId("profileTitle").textContent = `Academic profile: ${row.__name}`;
+      const profile = byId("studentProfile"); profile.innerHTML = "";
+      selectedFeatures().forEach(feature => {
+        const item = document.createElement("div"); item.className = "pill";
+        item.innerHTML = `<span>${feature.replaceAll("_", " ")}</span><strong>${row[feature]}</strong>`; profile.appendChild(item);
+      });
+      const members = assignments.filter(value => value === group).length;
+      byId("segmentSize").textContent = members;
+      byId("segmentCount").textContent = String(Math.max(...assignments) + 1);
+      byId("segmentNote").textContent = `This student is in Segment ${group + 1}. Segment IDs are just group labels; compare the averages below for context.`;
+      drawSummary(); drawChart();
+    }
+
+    function drawSummary() {
+      const features = selectedFeatures(); const k = Number(byId("kRange").value); const table = byId("summaryTable");
+      const header = `<tr><th>Segment</th><th>Students</th>${features.map(feature => `<th>${feature}</th>`).join("")}</tr>`;
+      const body = Array.from({length:k}, (_, group) => {
+        const members = rows.map((row, index) => assignments[index] === group ? row : null).filter(Boolean);
+        const averages = features.map(feature => `<td>${members.length ? (members.reduce((sum, row) => sum + row[feature], 0) / members.length).toFixed(1) : "—"}</td>`).join("");
+        return `<tr><td>Segment ${group + 1}</td><td>${members.length}</td>${averages}</tr>`;
+      }).join("");
+      table.innerHTML = `<thead>${header}</thead><tbody>${body}</tbody>`;
+    }
+
+    function drawChart() {
+      const canvas = byId("scatter"); const bounds = canvas.getBoundingClientRect(); const ratio = window.devicePixelRatio || 1;
+      canvas.width = bounds.width * ratio; canvas.height = bounds.height * ratio;
+      const context = canvas.getContext("2d"); context.scale(ratio, ratio);
+      const width = bounds.width, height = bounds.height, pad = 42;
+      const features = selectedFeatures(); const xKey = features.includes("G1") ? "G1" : features[0]; const yKey = features.includes("G2") ? "G2" : features[1];
+      const xs = rows.map(row => row[xKey]), ys = rows.map(row => row[yKey]);
+      const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+      context.clearRect(0, 0, width, height); context.strokeStyle = "#dce3ed"; context.lineWidth = 1;
+      context.beginPath(); context.moveTo(pad, 12); context.lineTo(pad, height-pad); context.lineTo(width-12, height-pad); context.stroke();
+      context.fillStyle = "#52627a"; context.font = "12px system-ui"; context.fillText(xKey, width/2, height-8); context.save(); context.translate(13, height/2); context.rotate(-Math.PI/2); context.fillText(yKey, 0, 0); context.restore();
+      const selected = Number(byId("studentSelect").value);
+      rows.forEach((row, index) => {
+        const x = pad + (row[xKey] - minX) / (maxX - minX || 1) * (width - pad - 24);
+        const y = height - pad - (row[yKey] - minY) / (maxY - minY || 1) * (height - pad - 24);
+        context.beginPath(); context.arc(x, y, index === selected ? 8 : 5, 0, Math.PI * 2);
+        context.fillStyle = colors[assignments[index] % colors.length]; context.fill();
+        if (index === selected) { context.strokeStyle = "#d62728"; context.lineWidth = 3; context.stroke(); }
+      });
+    }
+
+    function runAnalysis() {
+      const features = selectedFeatures(); const k = Number(byId("kRange").value);
+      if (features.length < 2) { byId("status").textContent = "Choose at least two features."; return; }
+      if (rows.length <= k) { byId("status").textContent = "Add more student rows or choose fewer segments."; return; }
+      try {
+        const complete = rows.filter(row => features.every(feature => Number.isFinite(row[feature])));
+        if (complete.length !== rows.length) { byId("status").textContent = "Some records have missing values in selected features."; return; }
+        const result = cluster(rows, features, k); assignments = result.labels;
+        const score = silhouette(result.values, assignments, k);
+        byId("silhouette").textContent = Number.isFinite(score) ? score.toFixed(3) : "—";
+        byId("status").textContent = ""; renderProfile();
+      } catch (error) { byId("status").textContent = error.message; }
+    }
+
+    async function initialize() {
+      try {
+        const response = await fetch("./sample_students.csv");
+        if (!response.ok) throw new Error("Could not load the bundled demo CSV.");
+        rows = parseCSV(await response.text()); detectColumns(rows);
+        drawFeatureChoices(); updateStudentOptions(); runAnalysis();
+      } catch (error) { byId("status").textContent = `${error.message} Open the site through GitHub Pages or upload a CSV.`; }
+    }
+
+    byId("csvFile").addEventListener("change", async event => {
+      const file = event.target.files[0]; if (!file) return;
+      try { rows = parseCSV(await file.text()); detectColumns(rows); drawFeatureChoices(); byId("search").value = ""; updateStudentOptions(); runAnalysis(); }
+      catch (error) { byId("status").textContent = error.message; }
+    });
+    byId("search").addEventListener("input", updateStudentOptions);
+    byId("studentSelect").addEventListener("change", renderProfile);
+    byId("kRange").addEventListener("input", () => byId("kLabel").textContent = byId("kRange").value);
+    byId("runButton").addEventListener("click", runAnalysis);
+    byId("featureList").addEventListener("change", runAnalysis);
+    window.addEventListener("resize", drawChart);
+    initialize();
+  </script>
+</body>
+</html>

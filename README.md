@@ -1,6 +1,16 @@
 # Student Academic Profile & Segmentation
 
-A Streamlit app for searching a student by name, viewing her selected academic profile, and seeing the exploratory K-means segment formed from academic/study features.
+A student segmentation project with two ways to explore it: a browser-based demo for GitHub Pages and a Python Streamlit app for running locally in VS Code.
+
+## Live demo
+
+[Open the Student Segmentation Dashboard](https://tejashwini7619.github.io/student-segmentation-ml-case-study/)
+
+The live page uses the fictional sample students in `sample_students.csv`. To publish it, enable GitHub Pages for this repository: open **Settings → Pages**, select **Deploy from a branch**, choose branch **main** and folder **/(root)**, then save. GitHub Pages serves the `index.html` browser demo; it does not run the Python Streamlit app.
+
+## Run the browser demo locally
+
+Open `index.html` in VS Code and use the **Live Server** extension, or enable GitHub Pages as described above. The browser demo supports name search, feature selection, K-means segments, profiles, and CSV upload.
 
 ## Run in VS Code
 
@@ -14,7 +24,7 @@ A Streamlit app for searching a student by name, viewing her selected academic p
    python -m streamlit run app.py
    ```
 
-The app opens in a browser. The fictional demo data is included locally. The UCI sample requires internet access.
+The Python app opens in a browser. The fictional demo data is included locally. The UCI sample requires internet access.
 
 ## Use name lookup with your own data
 
@@ -42,7 +52,7 @@ The UCI dataset contains historical data from two Portuguese secondary schools. 
 
 ## Method
 
-The app standardizes the chosen numeric features and fits K-means. It shows segment sizes, average feature values, a silhouette score, and a two-dimensional visualization. Cluster IDs are arbitrary; they are not rankings, diagnoses, or predictions. Results depend on data quality, feature selection, and the chosen number of clusters.
+Both versions standardize selected numeric features and apply K-means. They show segment sizes and average feature values; the dashboards also provide a silhouette score and visualization. Cluster IDs are arbitrary; they are not rankings, diagnoses, or predictions. Results depend on data quality, feature selection, and the chosen number of clusters.
 
 ## References
 
